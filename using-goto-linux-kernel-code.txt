@@ -1,0 +1,512 @@
+   Koblents -> Blog Photography ____________________ Search
+   Contact About
+
+   Ches
+   Ches Koblents » Links » March 2013 » Using Goto in Linux Kernel Code
+   Using Goto in Linux Kernel Code
+   Note: The full exchange can be found on the LKML but the combined
+   version is cleaner.
+   Note: The original link, http://kerneltrap.org/node/553/2131, is no
+   longer available, so I've rehosted the content here.
+   Submitted by Jeremy on January 13, 2003 - 5:39am
+   There was a recent discussion on the lkml about the frequent use of
+   "goto" in Linux kernel code. Drawing perhaps on Edsger Dikjstra's 1968
+   paper titled "Go To Statement Considered Harmful", the argument
+   proposed that using goto will only produce "spaghetti code". A more
+   recent proponent of this theory being Niklaus Wirth who developed
+   Pascal circa 1970 and its successor, Modula-2, in 1979.
+   In the recent thread on the lkml it is made quite clear that the use of
+   goto in Linux kernel code is well thought out and justified. One such
+   explanation can be found within chapter 2 of O'Reilly's excellent book,
+   Linux Device Drivers. It is further explained in the following thread
+   by a number of kernel developers including Robert Love [dead link
+   redacted], Rik van Riel [dead link redacted], and Linux creator Linus
+   Torvalds.
+From: Rob Wilkens
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 14:34:54 -0500
+
+Linus,
+
+I'm REALLY opposed to the use of the word "goto" in any code where it's
+not needed.  OF course, I'm a linux kernel newbie, so I'm in no position
+to comment
+
+Let me comment below the relevant code snippet below as to how I would
+change it:
+
+On Sun, 2003-01-12 at 14:15, Linus Torvalds wrote:
+>               if (spin_trylock(&tty_lock.lock))
+>                       goto got_lock;
+>               if (tsk == tty_lock.lock_owner) {
+>                       WARN_ON(!tty_lock.lock_count);
+>                       tty_lock.lock_count++;
+>                       return flags;
+>               }
+>               spin_lock(&tty_lock.lock);
+>       got_lock:
+>               WARN_ON(tty_lock.lock_owner);
+
+
+I would change it to something like the following (without testing the
+code through a compiler or anything to see if it's valid):
+
+                        if (!(spin_trylock(&tty_lock.lock))){
+                                if (tsk ==tty_lock.lock_owner){
+                                        WRAN_ON(!tty_lock.lcok_count);
+                                        tty_lock.lock_count++;
+                                        return flags;
+                                }
+                        }
+                        WARN_ON(tty_lock.lock_owner);
+
+
+Am I wrong that the above would do the same thing without generating the
+sphagetti code that a goto would give you.  Gotos are BAD, very very
+bad.  Please note also that the two if statements above could probably
+even be combined further into one statement by using a short circuit &&
+in the if.
+
+If I'm misinterpreting the original code, then forgive me..  I just saw
+a goto and gasped.  There's always a better option than goto.
+
+-Rob
+
+
+
+From: Linus Torvalds
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 11:38:35 -0800 (PST)
+
+On Sun, 12 Jan 2003, Rob Wilkens wrote:
+>
+> I'm REALLY opposed to the use of the word "goto" in any code where it's
+> not needed.
+
+I think goto's are fine, and they are often more readable than large
+amounts of indentation. That's _especially_ true if the code flow isn't
+actually naturally indented (in this case it is, so I don't think using
+goto is in any way _clearer_ than not, but in general goto's can be quite
+good for readability).
+
+Of course, in stupid languages like Pascal, where labels cannot be
+descriptive, goto's can be bad. But that's not the fault of the goto,
+that's the braindamage of the language designer.
+
+                Linus
+
+
+
+From: Rob Wilkens
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 14:59:57 -0500
+
+On Sun, 2003-01-12 at 14:38, Linus Torvalds wrote:
+> I think goto's are fine
+
+You're a relatively succesful guy, so I guess I shouldn't argue with
+your style.
+
+However, I have always been taught, and have always believed that
+"goto"s are inherently evil.  They are the creators of spaghetti code
+(you start reading through the code to understand it (months or years
+after its written), and suddenly you jump to somewhere totally
+unrelated, and then jump somewhere else backwards, and it all gets ugly
+quickly).  This makes later debugging of code total hell.
+
+Would it be so terrible for you to change the code you had there to
+_not_ use a goto and instead use something similar to what I suggested?
+Never mind the philosophical arguments, I'm just talking good coding
+style for a relatively small piece of code.
+
+If you want, but comments in your code to meaningfully describe what's
+happening instead of goto labels.
+
+In general, if you can structure your code properly, you should never
+need a goto, and if you don't need a goto you shouldn't use it.  It's
+just "common sense" as I've always been taught.  Unless you're
+intentionally trying to write code that's harder for others to read.
+
+-Rob
+
+
+
+From: Linus Torvalds
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 12:22:26 -0800 (PST)
+
+On Sun, 12 Jan 2003, Rob Wilkens wrote:
+>
+> However, I have always been taught, and have always believed that
+> "goto"s are inherently evil.  They are the creators of spaghetti code
+
+No, you've been brainwashed by CS people who thought that Niklaus Wirth
+actually knew what he was talking about. He didn't. He doesn't have a
+frigging clue.
+
+> (you start reading through the code to understand it (months or years
+> after its written), and suddenly you jump to somewhere totally
+> unrelated, and then jump somewhere else backwards, and it all gets ugly
+> quickly).  This makes later debugging of code total hell.
+
+Any if-statement is a goto. As are all structured loops.
+
+Ans sometimes structure is good. When it's good, you should use it.
+
+And sometimes structure is _bad_, and gets into the way, and using a
+"goto" is just much clearer.
+
+For example, it is quite common to have conditionals THAT DO NOT NEST.
+
+In which case you have two possibilities
+
+ - use goto, and be happy, since it doesn't enforce nesting
+
+        This makes the code _more_ readable, since the code just does what
+        the algorithm says it should do.
+
+ - duplicate the code, and rewrite it in a nesting form so that you can
+   use the structured jumps.
+
+        This often makes the code much LESS readable, harder to maintain,
+        and bigger.
+
+The Pascal language is a prime example of the latter problem. Because it
+doesn't have a "break" statement, loops in (traditional) Pascal end up
+often looking like total shit, because you have to add totally arbitrary
+logic to say "I'm done now".
+
+                Linus
+
+
+
+From: Robert Love
+Subject: Re: any chance of 2.6.0-test*?
+Date:   12 Jan 2003 15:33:37 -0500
+
+On Sun, 2003-01-12 at 15:22, Linus Torvalds wrote:
+
+> No, you've been brainwashed by CS people who thought that Niklaus
+> Wirth actually knew what he was talking about. He didn't. He
+> doesn't have a frigging clue.
+
+I thought Edsger Dijkstra coined the "gotos are evil" bit in his
+structured programming push?
+
+Nonetheless, they would both be wrong...
+
+        Robert Love
+
+
+
+From: Linus Torvalds
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 12:33:37 -0800 (PST)
+
+On 12 Jan 2003, Robert Love wrote:
+> On Sun, 2003-01-12 at 15:22, Linus Torvalds wrote:
+>
+> > No, you've been brainwashed by CS people who thought that Niklaus
+> > Wirth actually knew what he was talking about. He didn't. He
+> > doesn't have a frigging clue.
+>
+> I thought Edsger Dijkstra coined the "gotos are evil" bit in his
+> structured programming push?
+
+Yeah, he did, but he's dead, and we shouldn't talk ill of the dead. So
+these days I can only rant about Niklaus Wirth, who took the "structured
+programming" thing and enforced it in his languages (Pascal and Modula-2),
+and thus forced his evil on untold generations of poor CS students who had
+to learn langauges that weren't actually useful for real work.
+
+(Yeah, yeah, most _practical_ versions of Pascal ended up having all the
+stuff necessary to break structure, but as you may be able to tell, I was
+one of the unwashed masses who had to write in "standard Pascal" in my
+youth. I'm scarred for life).
+
+                        Linus
+
+
+
+From: Rik van Riel
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 19:29:37 -0200 (BRST)
+
+On Sun, 12 Jan 2003, Rob Wilkens wrote:
+
+> However, I have always been taught, and have always believed that
+> "goto"s are inherently evil.  They are the creators of spaghetti code
+
+If the main flow of the code is through a bunch of hard to trace
+gotos and you choose to blame the tool instead of the programmer,
+I guess you could blame goto.
+
+However, the goto can also be a great tool to make the code more
+readable.  The goto statement is, IMHO, one of the more elegant
+ways to code exceptions into a C function; that is, dealing with
+error situations that don't happen very often, in such a way that
+the error handling code doesn't clutter up the main code path.
+
+As an example, you could look at fs/super.c::do_kern_mount()
+
+        mnt = alloc_vfsmnt(name);
+        if (!mnt)
+                goto out;
+        sb = type->get_sb(type, flags, name, data);
+        if (IS_ERR(sb))
+                goto out_mnt;
+
+Do you see how the absence of the error handling cleanup code
+makes the normal code path easier to read ?
+
+regards,
+
+Rik
+--
+Bravely reimplemented by the knights who say "NIH".
+http://www.surriel.com/         http://guru.conectiva.com/
+Current spamtrap:  october@surriel.com
+
+
+
+From: Scott Robert Ladd
+Subject: RE: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 19:03:10 -0500
+
+Rob Wilken wrote:
+> Would it be so terrible for you to change the code you had there to
+> _not_ use a goto and instead use something similar to what I suggested?
+> Never mind the philosophical arguments, I'm just talking good coding
+> style for a relatively small piece of code.
+>
+> If you want, but comments in your code to meaningfully describe what's
+> happening instead of goto labels.
+>
+> In general, if you can structure your code properly, you should never
+> need a goto, and if you don't need a goto you shouldn't use it.  It's
+> just "common sense" as I've always been taught.  Unless you're
+> intentionally trying to write code that's harder for others to read.
+
+I've spent some time looking through the kernel source code, getting a feel
+for the style and process before attempting to contribute something of my
+own. In most ways, the quality of Linux code equals or exceeds that of
+commercial products I've worked on. It may not be perfect, but I'd prefer
+that the maintainers focus on features and bug fixes, not religious issues.
+
+Your attitude against "goto" is perhaps based upon an excellent but dated
+article, "Goto Considered Harmful", written by Edsger W. Dijkstra, and
+published by the ACM in 1968. (A recent reprint can be found at
+http://www.acm.org/classics/oct95/.) As you can tell from the date, this
+article predates modern programming languages and idioms; it comes from a
+time when Fortran ruled, and before Fortran 77 provided significant tools
+for avoiding spaghetti code.
+
+A "goto" is not, in and of itself, dangerous -- it is a language feature,
+one that directly translates to the jump instructions implemented in machine
+code. Like pointers, operator overloading, and a host of other "perceived"
+evils in programming, "goto" is widely hated by those who've been bitten by
+poor programming. Bad code is the product of bad programmers; in my
+experience, a poor programmer will write a poor program, regardless of the
+availability of "goto."
+
+If you think people can't write spaghetti code in a "goto-less" language, I
+can send you some *lovely* examples to disabuse you of that notion. ;)
+
+Used over short distances with well-documented labels, a "goto" can be more
+effective, faster, and cleaner than a series of complex flags or other
+constructs. The "goto" may also be safer and more intuitive than the
+alternative. A "break" is a goto; a "continue" is a "goto" -- these are
+statements that move the point of execution explicitly.
+
+That said, I have used exactly two "goto" statements in all the lines of C,
+C++, Fortran 95, and (yes) COBOL I've written since leaving BASIC and
+Fortran IV behind. In one case, a single "goto" doubled the speed of a
+time-critical application; in the other case, "goto" shortens a segment of
+code by half and makes the algorithm much clearer. I would not use a goto
+willy-nilly for the fun of it -- unless I was entering an obfuscated code
+contest ;)
+
+We keep lowering the bar for technical prowess, it seems; if something has
+the potential to be used "wrong", high-minded designers remove the offending
+syntax rather than find or train competent programmers. This is why Java
+removes pointers (among other things) -- it's not that pointers aren't
+useful or efficient, it's that they require discipline from programmers.
+
+Just because something is dogma doesn't mean it is absolute truth. If
+anything, dogma should be sniffed quite carefully, since it tends to be
+rather rank if you get close enough. Removing goto is a religious choice,
+not a technical one.
+
+I could draw parallels with idiotic laws in general society, but this
+message is already marginal for this list.
+
+..Scott
+
+--
+Scott Robert Ladd
+Coyote Gulch Productions (http://www.coyotegulch.com)
+Professional programming for science and engineering;
+Interesting and unusual bits of very free code.
+
+   - - - - - -
+From: David Lang
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 17:26:48 -0800 (PST)
+
+> I've only compiled (and haven't tested this code), but it should be much
+> faster than the original code.  Why?  Because we're eliminating an extra
+> "jump" in several places in the code every time open would be called.
+> Yes, it's more code, so the kernel is a little bigger, but it should be
+> faster at the same time, and memory should be less of an issue nowadays.
+
+Rob, one thing you may not have noticed since you haven't been following
+the list for a while is that with the current generation of computers size
+
+frequently translates directly into speed and a lot of the time honored
+performance tricks that trade size for fewer commands executed end up
+being losses.
+
+this can be seen by compiling code with -O2 and with -Os and frequently
+the -Os will actually be faster.
+
+This is becouse not all memory is equal, main memory is very slow compared
+to the CPU cache, so code that is slightly larger can cause more cache
+misses and therefor be slower, even if significantly fewer commands are
+executed.
+
+in addition frequently the effect isn't direct (i.e. no noticable
+difference on the code you are changing, but instead the change makes
+other code slower as it gets evicted from the cache)
+
+unfortunantly while this effect is known the rules of when to optimize for
+space and when to optimize for fewer cpu cycles for code execution are not
+clear and vary from CPU to CPU frequently within variations of the same
+family)
+
+if you google for -Os you should find one of the several discussions on
+the list in the last year on the subject.
+
+David Lang
+
+
+
+From: William Lee Irwin III
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 18:00:18 -0800
+
+On Sun, Jan 12, 2003 at 05:26:48PM -0800, David Lang wrote:
+> This is becouse not all memory is equal, main memory is very slow compared
+> to the CPU cache, so code that is slightly larger can cause more cache
+> misses and therefor be slower, even if significantly fewer commands are
+> executed.
+
+Not all memory is equal here, either i.e. I'm on NUMA boxen.
+
+Bill
+
+   - - - - - -
+From: Oliver Neukum
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 23:06:14 +0100
+
+> I've only compiled (and haven't tested this code), but it should be much
+> faster than the original code.  Why?  Because we're eliminating an extra
+> "jump" in several places in the code every time open would be called.
+> Yes, it's more code, so the kernel is a little bigger, but it should be
+> faster at the same time, and memory should be less of an issue nowadays.
+>
+> Here's the patch if you want to apply it (i have only compile tested it,
+> I haven't booted with it).. This patch applied to the 2.5.56 kernel.
+>
+> --- open.c.orig       2003-01-12 16:17:01.000000000 -0500
+> +++ open.c    2003-01-12 16:22:32.000000000 -0500
+> @@ -100,44 +100,58 @@
+>
+>       error = -EINVAL;
+>       if (length  -           goto out;
+> +             return error;
+
+Please don't do such things. The next time locking is changed and a lock
+is needed here, some poor guy has to go through that and change all
+back to goto.
+This may not be applicable here, but as a general rule, don't do it.
+I speak from experience.
+
+As for efficiency, that is the compiler's job.
+
+        Regards
+                Oliver
+
+
+
+From: Rob Wilkens
+Subject: Re: any chance of 2.6.0-test*?
+Date:   Sun, 12 Jan 2003 17:22:25 -0500
+
+On Sun, 2003-01-12 at 17:06, Oliver Neukum wrote:
+> Please don't do such things. The next time locking is changed and a lock
+> is needed here, some poor guy has to go through that and change all
+> back to goto.
+> This may not be applicable here, but as a general rule, don't do it.
+> I speak from experience.
+>
+> As for efficiency, that is the compiler's job.
+
+I say "please don't use goto" and instead have a "cleanup_lock" function
+and add that before all the return statements..  It should not be a
+burden.  Yes, it's asking the developer to work a little harder, but the
+end result is better code.
+
+-Rob
+
+
+
+From: Robert Love
+Subject: Re: any chance of 2.6.0-test*?
+Date:   12 Jan 2003 17:58:06 -0500
+
+On Sun, 2003-01-12 at 17:22, Rob Wilkens wrote:
+
+> I say "please don't use goto" and instead have a "cleanup_lock" function
+> and add that before all the return statements..  It should not be a
+> burden.  Yes, it's asking the developer to work a little harder, but the
+> end result is better code.
+
+No, it is gross and it bloats the kernel.  It inlines a bunch of junk
+for N error paths, as opposed to having the exit code once at the end.
+Cache footprint is key and you just killed it.
+
+Nor is it easier to read.
+
+As a final argument, it does not let us cleanly do the usual stack-esque
+wind and unwind, i.e.
+
+        do A
+        if (error)
+                goto out_a;
+        do B
+        if (error)
+                goto out_b;
+        do C
+        if (error)
+                goto out_c;
+        goto out;
+        out_c:
+        undo C
+        out_b:
+        undo B:
+        out_a:
+        undo A
+        out:
+        return ret;
+
+Now stop this.
+
+        Robert Love
+
+   Ches Koblents
+   March 1, 2013
+
+   « Newer Older »
+
+   © Copyright Koblents.com, 2012-2017
