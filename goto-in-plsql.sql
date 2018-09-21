@@ -1,5 +1,6 @@
 
 set serveroutput on size unlimited
+set feedback off
 
 /*
 
@@ -21,6 +22,61 @@ declare
 	match_index integer := 0;
 	
 	iterations integer := 0;
+
+
+	procedure p_results(
+		element_index_in number, 
+		iterations_in number,
+		method_in varchar2
+	)
+	is
+	begin
+
+		if 
+			( element_index_in is NULL ) 
+			or
+			( iterations_in is NULL ) 
+			or
+			( method_in is NULL ) 
+		then
+			raise_application_error(-20001,'do not call p_results with NULL arguments');
+		end if;
+
+		dbms_output.put_line('found match using "' || method_in || '"  in search_target(' || to_char(element_index_in) || ') ' || to_char(iterations_in) || ' iterations');
+
+	end;
+
+	procedure p_blank_line
+	is
+	begin
+		dbms_output.put_line(chr(9));
+	end;
+
+	procedure banner 
+	is
+	begin
+		dbms_output.put_line(rpad('=',80,'='));
+	end;
+
+	procedure p_out (
+		search_target_in varchar2,
+		search_result_in varchar2
+	)
+	is
+	begin
+
+		if 
+			( search_target_in is NULL ) 
+			or
+			( search_result_in is NULL ) 
+		then
+			raise_application_error(-20000,'do not call p_out with NULL arguments');
+		end if;
+
+		dbms_output.put_line('target: ' || search_target_in);
+		dbms_output.put_line('result: ' || search_result_in);
+
+	end;
 
 begin
 
@@ -47,6 +103,7 @@ begin
 	search_data(9) := 'nnd';
 	search_data(10) := 'ukk';
 
+	banner;
 
 	-- with goto
 	for x in search_target.first .. search_target.last
@@ -57,16 +114,22 @@ begin
 			iterations := iterations + 1;
 			if search_data(y) = search_target(x) then
 				match_index := x;
+				p_out(search_target(x), search_data(y));
 				goto MATCH_FOUND;
 			end if;
 		end loop;
 	end loop;
+	-- this bit is easy with GOTO 
+	-- this code executes only if no match is found
+	dbms_output.put_line('No Match Found!');
 	<<MATCH_FOUND>>
 
-	dbms_output.put_line('found match with goto in search_target(' || to_char(match_index) || ') in ' || to_char(iterations) || ' iterations');
+	p_results(match_index,iterations,'GOTO');
 
+	banner;
 	-- without goto	
 	iterations := 0;
+	match_index := 0;
 	for x in search_target.first .. search_target.last
 	loop
 		iterations := iterations + 1;
@@ -76,8 +139,7 @@ begin
 			if search_data(y) = search_target(x) then
 				match_index := x;
 				b_match_found := true;
-			end if;
-			if b_match_found then
+				p_out(search_target(x), search_data(y));
 				exit;
 			end if;
 		end loop;
@@ -86,8 +148,32 @@ begin
 		end if;
 	end loop;
 
+	p_results(match_index,iterations,'BOOLEAN IF-THEN');
 
-	dbms_output.put_line('found match WITHOUT goto in search_target(' || to_char(match_index) || ')' || to_char(iterations) || ' iterations');
+	banner;
+
+	-- without goto 
+	iterations := 0;
+	match_index := 0;
+	<<OUTERLOOP>>
+	for x in search_target.first .. search_target.last
+	loop
+		iterations := iterations + 1;
+		<<INNERLOOP>>
+		for y in search_data.first .. search_data.last
+		loop
+			iterations := iterations + 1;
+			if search_data(y) = search_target(x) then
+				match_index := x;
+				p_out(search_target(x), search_data(y));
+				exit OUTERLOOP;
+			end if;
+		end loop;
+	end loop;
+
+
+	p_results(match_index,iterations,'exit LOOP LABEL');
+	p_blank_line;
 
 	
 end;
